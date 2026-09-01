@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="PaperLex">
+  <rect width="512" height="512" rx="112" fill="#123d55"/>
+  <path d="M122 104h188c53 0 96 43 96 96v208H218c-53 0-96-43-96-96V104Z" fill="#f4f0e7"/>
+  <path d="M218 104h92c53 0 96 43 96 96v208H314c-53 0-96-43-96-96V104Z" fill="#e3ab43" opacity=".9"/>
+  <text x="165" y="329" fill="#123d55" font-family="Georgia,serif" font-size="180" font-weight="700">P</text>
+  <path d="M295 311c34-6 58-25 72-57" fill="none" stroke="#123d55" stroke-width="15" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,18 @@
+{
+  "name": "paperlex",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first vocabulary capture for academic reading in macOS Preview.",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "test": "node --test",
+    "check": "node --check server.mjs && node --check lib/*.mjs && node --check scripts/*.mjs && node --check public/app.js && node --check public/definition-format.js && node --check public/service-worker.js && node --test && ./scripts/test-macos-observer.sh",
+    "build:mac": "./scripts/build-macos-helper.sh",
+    "check:mac": "./scripts/test-macos-observer.sh"
+  }
+}

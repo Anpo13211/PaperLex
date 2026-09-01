@@ -1,0 +1,8 @@
+build
+data
+macos
+scripts
+test
+test-results
+.paperlex.env
+.DS_Store

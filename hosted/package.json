@@ -1,0 +1,28 @@
+{
+  "name": "paperlex-hosted",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vite dev",
+    "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vite build",
+    "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vite preview",
+    "test": "npm run build && node --test tests/*.test.ts",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.54.2",
+    "@openai/sites-vite-plugin": "0.1.0",
+    "@types/node": "22.19.19",
+    "drizzle-kit": "0.31.10",
+    "typescript": "5.9.3",
+    "vite": "8.2.2",
+    "wrangler": "4.127.1"
+  },
+  "type": "module"
+}
