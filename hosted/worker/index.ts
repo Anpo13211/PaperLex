@@ -1,3 +1,11 @@
+import {
+  clearSessionCookie,
+  createSessionCookie,
+  hasValidSession,
+  passwordMatches,
+  requiresLogin,
+  secretMatches,
+} from "./auth.ts";
 import { ValidationError } from "./normalize.ts";
 import { D1VocabularyStore, type D1DatabaseLike } from "./store.ts";
 
@@ -7,6 +15,10 @@ export interface Env {
   DB: D1DatabaseLike;
   PAPERLEX_CAPTURE_TOKEN?: string;
   PAPERLEX_IMPORT_TOKEN?: string;
+  // PAPERLEX_PASSWORD を設定すると、ChatGPT のログインではなく PaperLex 自身の
+  // パスワードで認証する。Cloudflare へ直接置く場合はこちらを使う。
+  PAPERLEX_PASSWORD?: string;
+  PAPERLEX_SESSION_SECRET?: string;
 }
 interface ExecutionContext { waitUntil(promise: Promise<unknown>): void; passThroughOnException(): void; }
 
@@ -44,8 +56,34 @@ export async function handleApi(request: Request, env: Env, url = new URL(reques
       }
       return json(200, await store.importBackup(await readJson(request, 8 * 1024 * 1024)));
     }
-    if (!hasAuthenticatedUser(request)) return json(401, { error: "ChatGPTでのログインが必要です。" });
-    if (url.pathname === "/api/config" && request.method === "GET") return json(200, { requiresLogin: false, authentication: "private-site" });
+    if (url.pathname === "/api/session" && request.method === "POST") {
+      assertJsonRequest(request);
+      assertSameOrigin(request);
+      if (!requiresLogin(env)) return json(404, { error: "このサイトはパスワードログインを使いません。" });
+      const body = await readJson(request, 4 * 1024);
+      if (!passwordMatches(body.password, env)) return json(401, { error: "パスワードが正しくありません。" });
+      const response = json(200, { ok: true });
+      response.headers.set("Set-Cookie", await createSessionCookie(env));
+      return response;
+    }
+    if (url.pathname === "/api/session" && request.method === "DELETE") {
+      assertSameOrigin(request);
+      const response = json(200, { ok: true });
+      response.headers.set("Set-Cookie", clearSessionCookie());
+      return response;
+    }
+
+    if (!await isAuthorized(request, env)) {
+      return json(401, {
+        error: requiresLogin(env) ? "PaperLex のパスワードでログインしてください。" : "ChatGPTでのログインが必要です。",
+      });
+    }
+    if (url.pathname === "/api/config" && request.method === "GET") {
+      return json(200, {
+        requiresLogin: requiresLogin(env),
+        authentication: requiresLogin(env) ? "password" : "private-site",
+      });
+    }
     if (url.pathname === "/api/words" && request.method === "GET") return json(200, { words: await store.listWords() });
     if (url.pathname === "/api/words" && request.method === "POST") {
       assertJsonRequest(request);
@@ -133,11 +171,13 @@ function assertSameOrigin(request: Request): void {
   throw error;
 }
 
-export function secretMatches(provided: string | null, expected: string | undefined): boolean {
-  if (!provided || !expected || provided.length !== expected.length) return false;
-  let difference = 0;
-  for (let index = 0; index < expected.length; index += 1) difference |= provided.charCodeAt(index) ^ expected.charCodeAt(index);
-  return difference === 0;
+export { secretMatches };
+
+// パスワードを設定していれば PaperLex のセッション、していなければ Sites の
+// プライベート配信が入れる oai-authenticated-user-id を認証の根拠にする。
+async function isAuthorized(request: Request, env: Env): Promise<boolean> {
+  if (requiresLogin(env)) return hasValidSession(request, env);
+  return hasAuthenticatedUser(request);
 }
 
 export function hasAuthenticatedUser(request: Request): boolean {

@@ -280,6 +280,81 @@ Preview からクラウドへ保存する場合は、Mac 側の `~/Library/Appli
 
 Sites のアクセス層が機械用 Bearer トークンを要求する場合だけ、プラットフォームから発行された値を `sitesBearerToken` として追加できます。ChatGPT のパスワードやセッションクッキーは使用しないでください。
 
+## 任意: Cloudflare へ直接置く（ChatGPT ログインなし）
+
+OpenAI Sites のプライベートサイトは、閲覧のたびに ChatGPT のログインを求めます。
+スマートフォンから開くたびにログインしたくない場合は、同じ `hosted/` を自分の
+Cloudflare アカウントへ直接デプロイし、PaperLex 自身のパスワードで認証できます。
+`PAPERLEX_PASSWORD` を設定したときだけこの方式に切り替わるため、Sites 版の構成は変わりません。
+
+ログインは1回だけで、セッションは1年有効な HttpOnly cookie に保持します。
+ホーム画面に追加すれば、以降はアイコンを押すだけで単語帳が開きます。
+
+Sites 版がページ全体をプラットフォーム側で守るのに対し、Cloudflare 版が守るのは `/api/` の
+データだけです。URL を知っている人には、単語を含まない空の画面とログイン欄までは見えます。
+
+### 1. Cloudflare を準備する
+
+```bash
+cd hosted
+npm ci
+npx wrangler login
+npx wrangler d1 create paperlex
+```
+
+### 2. Secret を設定する
+
+パスワードと署名鍵、取り込み用トークンを生成します。値はファイルや Git に保存しないでください。
+
+```bash
+openssl rand -hex 12   # PAPERLEX_PASSWORD（スマホで入力するもの）
+openssl rand -hex 32   # PAPERLEX_SESSION_SECRET
+openssl rand -hex 24   # PAPERLEX_CAPTURE_TOKEN
+```
+
+```bash
+npx wrangler secret put PAPERLEX_PASSWORD --name paperlex
+npx wrangler secret put PAPERLEX_SESSION_SECRET --name paperlex
+npx wrangler secret put PAPERLEX_CAPTURE_TOKEN --name paperlex
+```
+
+`PAPERLEX_PASSWORD` は総当たりへの唯一の防御なので、上のコマンドが生成する長さを保ってください。
+
+### 3. 単語帳のテーブルを作ってデプロイする
+
+```bash
+npx wrangler d1 execute paperlex --remote --file drizzle/0000_eminent_banshee.sql
+./scripts/deploy-cloudflare.sh
+```
+
+Worker 名や D1 名を変える場合は `PAPERLEX_WORKER_NAME` と `PAPERLEX_D1_NAME` を指定します。
+完了すると `https://paperlex.<サブドメイン>.workers.dev` が表示されます。
+
+### 4. 既存の単語を移す
+
+移行元の画面右上「バックアップ」で JSON を保存し、一時的な取り込みトークンを設定してから送ります。
+
+```bash
+npx wrangler secret put PAPERLEX_IMPORT_TOKEN --name paperlex
+PAPERLEX_IMPORT_TOKEN='さきほどの値' \
+  ./scripts/import-backup.sh ~/Downloads/paperlex-2026-09-04.json https://paperlex.example.workers.dev
+npx wrangler secret delete PAPERLEX_IMPORT_TOKEN --name paperlex
+```
+
+### 5. Preview の保存先を切り替える
+
+`~/Library/Application Support/PaperLex/capture.json` を新しい URL と取り込みトークンに変更します。
+Cloudflare 版は Sites のアクセス層を使わないため、`sitesBearerToken` は削除してください。
+
+```json
+{
+  "baseURL": "https://paperlex.example.workers.dev",
+  "token": "手順2で設定した PAPERLEX_CAPTURE_TOKEN と同じ値"
+}
+```
+
+変更後に `./scripts/install-local.sh` を再実行すると、`http://127.0.0.1:8787` も新しい単語帳へ転送されます。
+
 既存の JSON バックアップを hosted 版へ移す場合は、一時的な `PAPERLEX_IMPORT_TOKEN` を使って `/api/import` へ送信します。移行後は、その Secret を削除またはローテーションしてください。
 
 ## Docker でローカルサーバーを動かす

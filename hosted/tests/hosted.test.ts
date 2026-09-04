@@ -254,3 +254,91 @@ test("browser APIs require a signed-in identity while capture and import use nar
   assert.equal(secretMatches("wrong", "capture-secret"), false);
   db.close();
 });
+
+const passwordEnv = (db: SQLiteD1): Env => ({
+  DB: db,
+  ASSETS: { fetch: async () => new Response("asset") },
+  PAPERLEX_CAPTURE_TOKEN: "capture-secret",
+  PAPERLEX_PASSWORD: "correct-horse-battery-staple",
+  PAPERLEX_SESSION_SECRET: "session-secret-fixture-at-least-32-characters",
+});
+
+const login = async (env: Env, password: string) => handleApi(new Request("https://paperlex.example/api/session", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", Origin: "https://paperlex.example" },
+  body: JSON.stringify({ password }),
+}), env);
+
+const sessionCookie = (response: Response) => String(response.headers.get("Set-Cookie")).split(";", 1)[0];
+
+test("a PaperLex password replaces the ChatGPT login and keeps the library reachable", async (context) => {
+  const db = new SQLiteD1(migration);
+  context.after(() => db.close());
+  const env = passwordEnv(db);
+
+  const rejected = await login(env, "wrong-password");
+  assert.equal(rejected.status, 401);
+  assert.equal(String(rejected.headers.get("Set-Cookie")), "null");
+
+  const accepted = await login(env, "correct-horse-battery-staple");
+  assert.equal(accepted.status, 200);
+  const cookie = String(accepted.headers.get("Set-Cookie"));
+  assert.match(cookie, /^paperlex_session=[\w-]+\.[\w-]+;/u);
+  assert.match(cookie, /HttpOnly/u);
+  assert.match(cookie, /Secure/u);
+  assert.match(cookie, /SameSite=Strict/u);
+  // スマホで毎回ログインしないで済むよう、1年もつ cookie を出す。
+  assert.match(cookie, /Max-Age=31536000/u);
+
+  const headers = { Cookie: sessionCookie(accepted) };
+  const config = await handleApi(new Request("https://paperlex.example/api/config", { headers }), env);
+  assert.deepEqual(await config.json(), { requiresLogin: true, authentication: "password" });
+  const words = await handleApi(new Request("https://paperlex.example/api/words", { headers }), env);
+  assert.equal(words.status, 200);
+});
+
+test("a password site refuses forged sessions and the ChatGPT identity header", async (context) => {
+  const db = new SQLiteD1(migration);
+  context.after(() => db.close());
+  const env = passwordEnv(db);
+
+  const anonymous = await handleApi(new Request("https://paperlex.example/api/words"), env);
+  assert.equal(anonymous.status, 401);
+  assert.match(String((await anonymous.json()).error), /パスワード/u);
+
+  const forged = await handleApi(new Request("https://paperlex.example/api/words", {
+    headers: { Cookie: "paperlex_session=eyJpc3N1ZWRBdCI6MSwiZXhwaXJlc0F0Ijo5OTk5OTk5OTk5OTk5fQ.forged" },
+  }), env);
+  assert.equal(forged.status, 401);
+
+  // Sites 用のヘッダーは、パスワード運用のサイトでは通用しない。
+  const chatgpt = await handleApi(new Request("https://paperlex.example/api/words", {
+    headers: { "oai-authenticated-user-id": "owner-fixture" },
+  }), env);
+  assert.equal(chatgpt.status, 401);
+});
+
+test("signing out clears the session and Preview capture still uses its own token", async (context) => {
+  const db = new SQLiteD1(migration);
+  context.after(() => db.close());
+  const env = passwordEnv(db);
+  const cookie = sessionCookie(await login(env, "correct-horse-battery-staple"));
+
+  const signedOut = await handleApi(new Request("https://paperlex.example/api/session", {
+    method: "DELETE",
+    headers: { Cookie: cookie, Origin: "https://paperlex.example" },
+  }), env);
+  assert.equal(signedOut.status, 200);
+  assert.match(String(signedOut.headers.get("Set-Cookie")), /^paperlex_session=; .*Max-Age=0/u);
+
+  const captured = await handleApi(new Request("https://paperlex.example/api/capture", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-PaperLex-Token": "capture-secret",
+      Origin: "https://paperlex.example",
+    },
+    body: JSON.stringify({ term: "suffice", appleDefinition: "十分である" }),
+  }), env);
+  assert.equal(captured.status, 201);
+});

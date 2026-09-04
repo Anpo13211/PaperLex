@@ -39,3 +39,7 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+
+# local secrets for wrangler dev
+.dev.vars
+.dev.vars.*
