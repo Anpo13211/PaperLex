@@ -1218,6 +1218,36 @@ h1 {
   margin: 0;
 }
 
+/* 意味そのものは本文として読める大きさに、文法記号は注記へ落とす。 */
+.apple-sense-text {
+  color: #22383f;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.8;
+}
+
+.apple-annotation-list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 10px;
+  margin: 2px 0 0;
+}
+
+.apple-annotation-label {
+  color: var(--blue-dark);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.apple-annotation-value {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 .apple-sense + .apple-sense {
   padding-top: 14px;
   border-top: 1px solid var(--line);
@@ -1248,6 +1278,26 @@ h1 {
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
+}
+
+/* 英文と和訳を行で分け、原文と訳を見比べられるようにする。 */
+.apple-example-en {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.apple-example-ja {
+  margin: 3px 0 0;
+  color: #4d7280;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.apple-example-en + .apple-example-ja {
+  padding-top: 3px;
+  border-top: 1px dashed #b6d0d9;
 }
 
 .apple-derived-section {

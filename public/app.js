@@ -1,5 +1,6 @@
 import {
   appleDefinitionDetail,
+  splitExamplePairs,
   appleDefinitionPreview,
   automaticExamplesForDetail,
   partOfSpeechLabel,
@@ -742,6 +743,7 @@ function renderAppleSenseList(group) {
     const item = element('li', 'apple-sense-item');
     const content = element('div', 'apple-sense-content');
     appendAppleClauses(content, sense.text);
+    appendAppleAnnotations(content, sense);
     appendAppleExamples(content, sense.examples);
     if (group.showMarkers) {
       const marker = element('span', 'apple-sense-marker', sense.displayMarker);
@@ -794,18 +796,40 @@ function appendAppleClauses(container, value) {
   }
 }
 
+// 文法記号は語義本文から切り離し、意味そのものを読める大きさで残す。
+function appendAppleAnnotations(container, sense) {
+  const rows = [
+    ['型', sense.patterns],
+    ['対象', sense.subjects],
+    ['用法', sense.usages],
+    ['文体', sense.registers],
+    ['注記', sense.notes],
+  ].filter(([, values]) => Array.isArray(values) && values.length);
+  if (!rows.length) return;
+
+  const list = element('dl', 'apple-annotation-list');
+  for (const [label, values] of rows) {
+    list.append(
+      element('dt', 'apple-annotation-label', label),
+      element('dd', 'apple-annotation-value', values.join(' / ')),
+    );
+  }
+  container.append(list);
+}
+
 function appendAppleExamples(container, examples) {
   if (!Array.isArray(examples) || !examples.length) return;
   const list = element('ul', 'apple-example-list');
   for (const example of examples) {
-    const item = element('li', 'apple-example');
-    item.append(
-      element('span', 'apple-example-label', '用例'),
-      element('span', '', example),
-    );
-    list.append(item);
+    for (const { english, japanese } of splitExamplePairs(example)) {
+      const item = element('li', 'apple-example');
+      item.append(element('span', 'apple-example-label', '用例'));
+      if (english) item.append(element('p', 'apple-example-en', english));
+      if (japanese) item.append(element('p', 'apple-example-ja', japanese));
+      list.append(item);
+    }
   }
-  container.append(list);
+  if (list.children.length) container.append(list);
 }
 
 function renderExample(value) {

@@ -49,7 +49,7 @@ test("hosted Japanese formatting separates meanings, parts of speech and derivat
   const underscore = appleDefinitionDetail(hostedUnderscoreDefinition);
   assert.deepEqual(underscore.groups.map(({ partOfSpeech }: { partOfSpeech: string[] }) => partOfSpeech), [["動詞", "他動詞"], ["名詞"]]);
   assert.deepEqual(underscore.groups.map(({ senses }: { senses: Array<{ text: string }> }) => senses.map(({ text }) => text)), [
-    ["…を強調する, 明白にする(｟主に英｠ underline).", "…に下線を引く(｟主に英｠ underline)."],
+    ["…を強調する, 明白にする(underline).", "…に下線を引く(underline)."],
     ["下線, アンダーライン."],
   ]);
 });
@@ -103,6 +103,39 @@ test("normalization and provider payload mapping are compatible", () => {
   assert.equal(dictionary?.source, "Free Dictionary API");
   const examples = mapTatoebaPayload({ data: [{ id: 7, lang: "eng", text: "A test.", owner: "alice", translations: [[{ id: 8, lang: "jpn", text: "テスト。", owner: "bob" }]] }] });
   assert.equal(examples[0].translation, "テスト。");
+});
+
+test("hosted normalization strips PDF punctuation exactly like the local edition", () => {
+  // 文末で選ぶと「suffice.」になり、辞書が引けずに意味なしで保存されていた。
+  assert.equal(cleanTerm("suffice."), "suffice");
+  assert.equal(cleanTerm("“suffice”"), "suffice");
+  assert.equal(cleanTerm("(suffice),"), "suffice");
+  assert.equal(cleanTerm("suffice[12]"), "suffice");
+  assert.equal(cleanTerm("suffice†"), "suffice");
+  assert.equal(cleanTerm("suf\u00ADfice"), "suffice");
+  assert.equal(normalizeTerm("Suffice."), "suffice");
+});
+
+test("hosted normalization keeps abbreviations, compounds and possessives intact", () => {
+  assert.equal(cleanTerm("e.g."), "e.g.");
+  assert.equal(cleanTerm("Ph.D."), "Ph.D.");
+  assert.equal(cleanTerm("a-priori"), "a-priori");
+  assert.equal(cleanTerm("state-of-the-art"), "state-of-the-art");
+  assert.equal(cleanTerm("Occam's razor"), "Occam's razor");
+  assert.equal(cleanTerm("C++"), "C++");
+});
+
+test("a word saved from the phone reaches the store under its cleaned term", async (context) => {
+  const db = new SQLiteD1(migration);
+  context.after(() => db.close());
+  const store = new D1VocabularyStore(db, undefined, { dictionary: dictionaryLookup, examples: exampleLookup });
+
+  const captured = await store.capture({ term: " “suffice.” ", sourceApp: "PaperLex web" });
+
+  assert.equal(captured.created, true);
+  assert.equal(captured.word.term, "suffice");
+  const stored = await store.listWords();
+  assert.deepEqual(stored.map(({ term }) => term), ["suffice"]);
 });
 
 test("dictionary falls back to attributed Wiktionary definitions and retries hyphenated terms", async () => {

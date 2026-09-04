@@ -5,6 +5,7 @@ import {
   appleDefinitionPreview,
   parseAppleDefinition,
   partOfSpeechLabel,
+  splitExamplePairs,
 } from '../public/definition-format.js';
 
 const denseAppleDefinition = 'アプリオリ 2ラテン•a priori〔「より先のものから」の意〕① アリストテレス的伝統では，原因・根拠であるという意味で，より先なる事象に基づいて，結果にあたる事象を導出する論証の性格をいう。② 近代では，「先天的」の意。生物学・心理学などで，ある機能が生得的に与えられていること。また哲学，特にカントの認識論では，認識・概念などが後天的な経験に依存せず，それに論理的に先立つものとして与えられていること。 ↔ア-ポステリオリ';
@@ -60,7 +61,8 @@ test('plain Arabic Apple senses and their usage examples are separated', () => {
   assert.equal(parsed.lead, 'there･by | ðèərbáɪ | 副詞｟かたく｠');
   assert.equal(parsed.numbered, true);
   assert.deepEqual(parsed.senses.map(({ marker }) => marker), ['1', '2', '3']);
-  assert.equal(parsed.senses[0].text, '〖しばしば～ doing〗 それによって');
+  assert.equal(parsed.senses[0].text, 'それによって');
+  assert.deepEqual(parsed.senses[0].usages, ['しばしば～ doing']);
   assert.equal(parsed.senses[0].examples.length, 1);
   assert.match(parsed.senses[0].examples[0], /^The company started mass production/);
   assert.equal(parsed.senses[1].text, 'それについて[関して].');
@@ -71,7 +73,10 @@ test('an Arabic first sense attached to a part-of-speech label is recognized', (
 
   assert.deepEqual(parsed.senses.map(({ marker }) => marker), ['1', '2', '3']);
   assert.equal(parsed.lead, 'im･prove | ɪmprúːv | 動詞 他動詞');
-  assert.equal(appleDefinitionPreview(parsed.lead + '1 ' + parsed.senses[0].text + ' 2 二番目'), '〈人･事が〉〈物･事〉を改善する');
+  // 助詞が続く 〈物･事〉を は本文に残し、単独の主語表示だけを注記へ移す。
+  assert.equal(parsed.senses[0].text, '〈物･事〉を改善する');
+  assert.deepEqual(parsed.senses[0].subjects, ['人･事が']);
+  assert.equal(appleDefinitionPreview(parsed.lead + '1 ' + parsed.senses[0].text + ' 2 二番目'), '〈物･事〉を改善する');
 });
 
 const improveAppleDefinition =
@@ -172,9 +177,10 @@ test('compact underscore entry separates verb senses from its noun group', () =>
   assert.equal(parsed.groups.length, 2);
   assert.deepEqual(parsed.groups[0].partOfSpeech, ['動詞', '他動詞']);
   assert.deepEqual(parsed.groups[0].senses.map(({ marker, text }) => ({ marker, text })), [
-    { marker: '1', text: '…を強調する, 明白にする(｟主に英｠ underline).' },
-    { marker: '2', text: '…に下線を引く(｟主に英｠ underline).' },
+    { marker: '1', text: '…を強調する, 明白にする(underline).' },
+    { marker: '2', text: '…に下線を引く(underline).' },
   ]);
+  assert.deepEqual(parsed.groups[0].senses[0].registers, ['主に英']);
   assert.deepEqual(parsed.groups[1].partOfSpeech, ['名詞']);
   assert.equal(parsed.groups[1].pronunciation, '-́--̀');
   assert.deepEqual(parsed.groups[1].grammar, ['可算']);
@@ -188,4 +194,71 @@ test('headword pronunciation and part of speech never leak into sense text', () 
     const senseText = parsed.groups.flatMap(({ senses }) => senses.map(({ text }) => text)).join(' ');
     assert.doesNotMatch(senseText, /e･lu|ùnder･scóre|\||動詞|名詞|形容詞/u);
   }
+});
+
+const sufficeAppleDefinition =
+  'suf･fice | səfáɪs | 動詞｟かたく｠ (!進行形にしない) 自動詞〈物･事が〉 «…するのに/…には» 十分である «to do/for» '
+  + '▸ A simple “thank you” will suffice. 単に「ありがとう」という言葉で十分である. '
+  + 'Suffíce (it) to sày (that) .... 〖文頭で〗…と言えば十分である, …と言うにとどめておこう.';
+
+const sufficientAppleDefinition =
+  'suf･fi･cient | səfɪ́ʃ(ə)nt | 形容詞比較なし 1 ｟ややかたく｠ «…するのに/…にとって» 十分な, 足りる «to do/for» '
+  + '(!enoughよりかたい語; ↔ insufficient) ▸ I have sufficient income. 十分な収入がある. '
+  + '2 ｟古｠ 有能な; 十分資格がある. 名詞U｟ややかたく｠ 十分(の量)(enough) '
+  + '▸ I\'ve had quite sufficient. 十分いただきました.';
+
+const curateAppleDefinition =
+  'cu･rate | kjʊ́ərət | 名詞C1 (英国国教会の)副牧師 (!rectorやvicarを助ける) . 2 (プロテスタントの)教区牧師; '
+  + '(カトリックの)助任司祭. 動詞 | kju(ə)réɪt | 他動詞〈展示[展覧]会など〉を企画[主催]する (!しばしば受け身で) . '
+  + '～̀\'s égg ｟英｠ よさと悪さを両方持つ物[事]; ピンキリ.';
+
+test('a sense keeps the meaning itself and moves grammar notation into annotations', () => {
+  const [sense] = appleDefinitionDetail(sufficeAppleDefinition).senses;
+
+  assert.equal(sense.text, '十分である');
+  assert.deepEqual(sense.patterns, ['…するのに/…には', 'to do/for']);
+  assert.deepEqual(sense.subjects, ['物･事が']);
+  assert.deepEqual(sense.notes, ['進行形にしない']);
+});
+
+test('an inline part-of-speech label starts its own group instead of joining the previous sense', () => {
+  const { groups } = appleDefinitionDetail(sufficientAppleDefinition);
+
+  assert.deepEqual(groups.map(({ partOfSpeech }) => partOfSpeech), [['形容詞'], ['名詞']]);
+  assert.deepEqual(groups[0].senses.map(({ text }) => text), ['十分な, 足りる', '有能な; 十分資格がある.']);
+  assert.deepEqual(groups[1].senses.map(({ text }) => text), ['十分(の量)(enough)']);
+  assert.deepEqual(groups[1].grammar, ['不可算']);
+  // 括弧ごと注記へ移すため、(!…) の中の ; で語義が割れない。
+  assert.deepEqual(groups[0].senses[0].notes, ['enoughよりかたい語; ↔ insufficient']);
+});
+
+test('a countable marker before the first sense number does not hide the numbering', () => {
+  const { groups } = appleDefinitionDetail(curateAppleDefinition);
+
+  assert.deepEqual(groups.map(({ partOfSpeech }) => partOfSpeech), [['名詞'], ['動詞'], ['成句']]);
+  assert.deepEqual(groups[0].grammar, ['可算']);
+  assert.equal(groups[0].intro, '');
+  assert.deepEqual(groups[0].senses.map(({ text }) => text), [
+    '(英国国教会の)副牧師.',
+    '(プロテスタントの)教区牧師; (カトリックの)助任司祭.',
+  ]);
+  assert.match(groups[2].senses[0].text, /^～̀'s égg/u);
+});
+
+test('an example splits into its English sentence and Japanese translation', () => {
+  const [sense] = appleDefinitionDetail(sufficeAppleDefinition).senses;
+
+  assert.deepEqual(splitExamplePairs(sense.examples[0]), [
+    { english: 'A simple “thank you” will suffice.', japanese: '単に「ありがとう」という言葉で十分である.' },
+    {
+      english: 'Suffíce (it) to sày (that) ....',
+      japanese: '〖文頭で〗…と言えば十分である, …と言うにとどめておこう.',
+    },
+  ]);
+});
+
+test('splitExamplePairs keeps a one-sided example usable', () => {
+  assert.deepEqual(splitExamplePairs('必要十分条件.'), [{ english: '', japanese: '必要十分条件.' }]);
+  assert.deepEqual(splitExamplePairs('an ephemeral cache'), [{ english: 'an ephemeral cache', japanese: '' }]);
+  assert.deepEqual(splitExamplePairs('  '), []);
 });
