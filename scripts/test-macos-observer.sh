@@ -6,6 +6,7 @@ source_dir="$(cd -- "$script_dir/.." && pwd -P)"
 observer="$source_dir/build/PaperLex Observer.app/Contents/MacOS/PaperLexLookupObserver"
 observer_source="$source_dir/macos/PaperLexLookupObserver.m"
 capture_source="$source_dir/macos/PaperLexCapture.m"
+capture="$source_dir/build/paperlex-capture"
 
 "$source_dir/scripts/build-macos-helper.sh" >/dev/null
 
@@ -106,6 +107,31 @@ assert_source_excludes() {
   fi
 }
 
+assert_canonical_term() {
+  local expected="$1"
+  local raw="$2"
+  local actual
+  actual="$("$capture" --canonical-only "$raw")"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "見出し語整形の期待: $expected / 実際: $actual / 入力: $raw" >&2
+    exit 1
+  fi
+}
+
+# 選択に混ざった句読点や行末ハイフンで辞書結果が変わらないことを、辞書の中身に依存せず確かめる。
+assert_same_definition() {
+  local raw="$1"
+  local canonical="$2"
+  local raw_output=""
+  local canonical_output=""
+  raw_output="$("$capture" --definition-only "$raw" 2>/dev/null)" || true
+  canonical_output="$("$capture" --definition-only "$canonical" 2>/dev/null)" || true
+  if [[ "$raw_output" != "$canonical_output" ]]; then
+    echo "句読点付きの選択で辞書結果が変わりました: $raw" >&2
+    exit 1
+  fi
+}
+
 assert_capture_source_contains() {
   local contract="$1"
   local expected="$2"
@@ -114,6 +140,18 @@ assert_capture_source_contains() {
     exit 1
   fi
 }
+
+assert_canonical_term "suffice" "suffice."
+assert_canonical_term "suffice" "“suffice”"
+assert_canonical_term "suffice" "(suffice),"
+assert_canonical_term "suffice" "suffice[12]"
+assert_canonical_term "suffice" "suffice*"
+assert_canonical_term "e.g." "e.g."
+assert_canonical_term "a-priori" "a-priori"
+assert_canonical_term "C++" "C++"
+assert_same_definition "suffice." "suffice"
+assert_same_definition "suf-fice" "suffice"
+assert_same_definition "“contrastive”" "contrastive"
 
 assert_match "ephemeral" '“ephemeral”を調べる'
 assert_match "amortized analysis" 'Look Up “amortized analysis”'
@@ -147,12 +185,16 @@ assert_source_contains "Preview applicationを起点にAX hit-testする" "AXUIE
 assert_source_contains "menu itemの親階層を十分に探索する" "depth < 16"
 assert_source_contains "非menu要素をsystem failureと誤記しない" "*hitTestError = kAXErrorNoValue"
 assert_source_contains "右クリック後はPreview PID sessionを使う" "self.lookupProcessIdentifier"
+assert_source_contains "メニュー操作中は猶予を延長する" "refreshLookupSession"
+assert_source_contains "猶予切れでもメニュークリックは拾う" "eventType != kCGEventLeftMouseUp || self.lookupProcessIdentifier <= 0"
 assert_source_excludes "system-wide AX hit-testを使わない" "AXUIElementCreateSystemWide()"
 assert_source_excludes "旧NSEvent global monitorを使わない" "addGlobalMonitorForEventsMatchingMask"
 assert_capture_source_contains "private Sites認証トークンを任意設定できる" 'configuration[@"sitesBearerToken"]'
 assert_capture_source_contains "Sites認証ヘッダーを送る" '@"OAI-Sites-Authorization"'
+assert_capture_source_contains "選択語の前後の句読点を落とす" "TrimEdgePunctuation"
+assert_capture_source_contains "省略形のピリオドは残す" "DropSentencePeriod"
 
 /usr/bin/plutil -lint "$source_dir/build/PaperLex Observer.app/Contents/Info.plist" >/dev/null
 /usr/bin/codesign --verify --deep --strict "$source_dir/build/PaperLex Observer.app"
 
-echo "PaperLex Observer: メニュー判定 9件、選択語解決 3件、Lookup session 4件、observer契約 17件、capture helper契約 2件、plist、署名の検証に成功しました。"
+echo "PaperLex Observer: メニュー判定 9件、選択語解決 3件、Lookup session 4件、見出し語整形 11件、observer契約 19件、capture helper契約 4件、plist、署名の検証に成功しました。"

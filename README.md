@@ -103,6 +103,10 @@ launchctl kickstart -k "gui/$UID/io.paperlex.lookup-observer"
 
 Apple 辞書の日本語定義は品詞ごとのグループに分け、発音や可算・不可算の情報を意味本文から分離します。`elucidator` のような派生語は番号付き語義ではなく「派生語」欄に表示します。この整形は、すでに保存済みの単語にも適用されます。
 
+### 選択に句読点が混ざったとき
+
+PDF では文末や引用符ごと選ばれることがあります。`suffice.`、`“suffice”`、`suffice[12]`、`suffice*` のような選択は、辞書を引く前に見出し語の `suffice` へ整えます。`e.g.` や `Ph.D.` のピリオド、`a-priori` や `state-of-the-art` のハイフン、`Occam's razor` のアポストロフィはそのまま残します。行末で分断された `suf-fice` は、連結した形が辞書にあるときだけ `suffice` として保存します。それでも辞書が引けなかった場合は、保存メッセージに「Apple辞書の定義が見つかりませんでした」と残るため、`~/Library/Application Support/PaperLex/logs/observer.log` で確認できます。
+
 ## Mac とスマートフォンから開く
 
 ### プライベートクラウド版を設定している場合

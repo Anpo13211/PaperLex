@@ -279,6 +279,12 @@ static CGEventRef PLEventTapCallback(CGEventTapProxy proxy, CGEventType type, CG
     self.candidateTerm = @"";
 }
 
+// メニューを操作している間は猶予を延長する。右クリックからの経過時間で切ると、
+// 本文を読み返してから「“単語”を調べる」を押した場合に取りこぼす。
+- (void)refreshLookupSession:(NSTimeInterval)now {
+    if (self.lookupProcessIdentifier > 0) self.lookupSessionTime = now;
+}
+
 - (void)installEventMonitor {
     [self removeEventTap];
     if (!self.lastTrustedState || !self.lastListenState) return;
@@ -388,8 +394,13 @@ static CGEventRef PLEventTapCallback(CGEventTapProxy proxy, CGEventType type, CG
     pid_t previewProcessIdentifier = PLResolveLookupProcessIdentifier(
         NO, @"", 0, self.lookupProcessIdentifier, now - self.lookupSessionTime);
     if (previewProcessIdentifier <= 0) {
-        [self clearLookupSession];
-        return;
+        // 猶予を過ぎても、メニュー項目のクリックそのものは取りこぼさない。
+        // 直前に右クリックしたPreviewをそのまま使い、実体はこの下のbundle判定で確認する。
+        if (eventType != kCGEventLeftMouseUp || self.lookupProcessIdentifier <= 0) {
+            [self clearLookupSession];
+            return;
+        }
+        previewProcessIdentifier = self.lookupProcessIdentifier;
     }
     NSRunningApplication *previewApplication =
         [NSRunningApplication runningApplicationWithProcessIdentifier:previewProcessIdentifier];
@@ -436,6 +447,7 @@ static CGEventRef PLEventTapCallback(CGEventTapProxy proxy, CGEventType type, CG
         else self.candidateTerm = @"";
         return;
     }
+    [self refreshLookupSession:now];
     NSString *term = PLTermForLookupItem(title, identifier, @"");
     if (!term.length && PLIsLookupMenuItem(title, identifier)) {
         NSString *currentSelection = PLSelectedText(previewProcessIdentifier);
