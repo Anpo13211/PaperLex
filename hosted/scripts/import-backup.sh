@@ -25,15 +25,15 @@ fi
 
 while [[ "$base_url" == */ ]]; do base_url="${base_url%/}"; done
 
-status="$(/usr/bin/curl -sS -o /tmp/paperlex-import-response.json -w '%{http_code}' \
+http_status="$(/usr/bin/curl -sS -o /tmp/paperlex-import-response.json -w '%{http_code}' \
   -X POST "$base_url/api/import" \
   -H 'Content-Type: application/json' \
   -H "X-PaperLex-Import-Token: $token" \
   -H "Origin: $base_url" \
   --data-binary "@$backup")"
 
-if [[ "$status" != "200" ]]; then
-  echo "取り込みに失敗しました (HTTP $status)" >&2
+if [[ "$http_status" != "200" ]]; then
+  echo "取り込みに失敗しました (HTTP $http_status)" >&2
   /bin/cat /tmp/paperlex-import-response.json >&2
   echo >&2
   exit 1
