@@ -2,7 +2,9 @@
 
 PaperLex は、macOS の Preview で論文を読みながら使える個人用単語帳です。選択した単語に対して Apple 標準の「調べる」を実行すると、いつもの辞書パネルを表示したまま、その単語と辞書情報を自動保存します。
 
-Apple 辞書の定義に加えて、Free Dictionary API / Wiktionary の英語定義と Tatoeba の例文を表示できます。ローカル版は Mac または同じ Wi-Fi 上のスマートフォンから、任意のプライベートクラウド版は Mac の停止中や別のネットワークからも復習できます。
+Apple 辞書の定義に加えて、Free Dictionary API / Wiktionary の英語定義と Tatoeba の例文を表示できます。
+
+ローカル版は Mac、または同じ Wi-Fi 上のスマートフォンから開けます。任意のクラウド版を用意すると、Mac が停止中でも別のネットワークから復習できます。クラウド版は Cloudflare か OpenAI Sites に置け、Cloudflare を選べば PaperLex 自身のパスワードで入れるため、開くたびに ChatGPT へログインする必要はありません。
 
 ## 主な機能
 
@@ -95,7 +97,10 @@ launchctl kickstart -k "gui/$UID/io.paperlex.lookup-observer"
 1. Preview で、PDF 内の単語または熟語を選択します。
 2. 右クリックして「“単語”を調べる」を選びます。
 3. Apple の辞書パネルが開き、同時に PaperLex へ単語が保存されます。
-4. URL をブラウザで開きます。ローカル版ではインストール時に表示されたパスワード、プライベートクラウド版では公開先へのアクセス権がある ChatGPT アカウントでログインします。
+4. URL をブラウザで開きます。ログイン方法は置き場所によって異なります。
+   - ローカル版: インストール時に表示されたパスワード
+   - Cloudflare 版: 自分で設定した `PAPERLEX_PASSWORD`
+   - OpenAI Sites 版: 公開先へのアクセス権がある ChatGPT アカウント
 
 自動保存できない場合でも、選択した文字を右クリックし「サービス > PaperLex に保存」を選べます。スキャン画像だけの PDF は、Preview で文字を選択できるように OCR してから使用してください。
 
@@ -109,13 +114,13 @@ PDF では文末や引用符ごと選ばれることがあります。`suffice.`
 
 ## Mac とスマートフォンから開く
 
-### プライベートクラウド版を設定している場合
+### クラウド版を設定している場合
 
-Preview の保存先をプライベートクラウド版にした場合、D1 の単語帳が唯一の正本です。Mac とスマートフォンのどちらからも、クラウド版の URL を開いてください。Mac が停止中でも、スマートフォンを別の Wi-Fi やモバイル回線から利用できます。
+Preview の保存先をクラウド版にした場合、D1 の単語帳が唯一の正本です。Mac とスマートフォンのどちらからも、クラウド版の URL を開いてください。Mac が停止中でも、スマートフォンを別の Wi-Fi やモバイル回線から利用できます。
 
-クラウド版の URL は、後述の手順で各自が作成したものを使用します。このリポジトリは共用の単語帳サイトを提供しません。ブラウザで単語帳を閲覧・編集するには、自分の公開先へのアクセス権がある ChatGPT アカウントでログインします。Preview からの自動保存はブラウザログインを使わず、Mac に設定した専用の取り込みトークンで認証します。
+クラウド版の URL は、後述の手順で各自が作成したものを使用します。このリポジトリは共用の単語帳サイトを提供しません。閲覧・編集のログインは、Cloudflare 版なら `PAPERLEX_PASSWORD`、OpenAI Sites 版なら ChatGPT アカウントです。どちらの場合も、Preview からの自動保存はブラウザのログインを使わず、Mac に設定した専用の取り込みトークンで認証します。
 
-`capture.json` のクラウド設定を保ったままインストーラーを再実行すると、`http://127.0.0.1:8787` も同じクラウド版へ自動転送されます。移行前のローカル SQLite を確認する場合だけ、次の退避 URL を使います。
+`PAPERLEX_LIBRARY_URL` を設定しておくと、`http://127.0.0.1:8787` も同じクラウド版へ自動転送されます。移行前のローカル SQLite を確認する場合だけ、次の退避 URL を使います。
 
 ```text
 http://127.0.0.1:8787/?local=1
@@ -152,6 +157,15 @@ http://127.0.0.1:8787
 | `PAPERLEX_SECURE_COOKIE` | Cookie を HTTPS 限定にする | `true` または `false` |
 | `PAPERLEX_DATA_DIR` | SQLite データの保存先 | 既定値は `./data` |
 | `PAPERLEX_LIBRARY_URL` | localhost から開くクラウド単語帳 | 認証情報・query・fragment を含まない外部 HTTPS hostname。通常は有効な remote `capture.json` から自動設定 |
+
+クラウド版（`hosted/`）では、次の値をランタイムの Secret として設定します。ローカル版とは別の値にしてください。
+
+| 環境変数 | 用途 | 条件 |
+| --- | --- | --- |
+| `PAPERLEX_PASSWORD` | ブラウザへのログイン | 設定するとパスワード認証、未設定なら OpenAI Sites の認証に任せる |
+| `PAPERLEX_SESSION_SECRET` | ログインセッションの署名 | パスワード認証時は 32 文字以上 |
+| `PAPERLEX_CAPTURE_TOKEN` | Preview からの取り込み認証 | 24 文字以上、必須 |
+| `PAPERLEX_IMPORT_TOKEN` | バックアップ取り込み | 移行時だけ設定し、終わったら削除する |
 
 秘密情報を Git にコミットしないでください。開発用に直接サーバーを起動する場合は、次のように一時的な値を生成できます。
 
@@ -195,6 +209,41 @@ tail -n 50 "$HOME/Library/Application Support/PaperLex/logs/server-error.log"
 
 4. 予備手段の「サービス > PaperLex に保存」を試します。
 
+### インストーラーを再実行したら「調べる」が効かなくなった
+
+`./scripts/install-local.sh` は `PaperLex Observer` を置き換えます。Observer はローカルの
+ad-hoc 署名でビルドするため、置き換えると署名が変わり、macOS がアクセシビリティと入力監視の
+許可を失効させます。ログには次の行が残ります。
+
+```text
+PaperLex lookup observer started (Accessibility needed, Input Monitoring needed).
+```
+
+「システム設定 > プライバシーとセキュリティ」のアクセシビリティと入力監視の両方で、
+`PaperLex Observer` の項目を `−` で削除してから `+` で `~/Applications/PaperLex Observer.app`
+を追加し直します。トグルの切り替えだけでは戻りません。そのうえで Observer を再起動します。
+
+```bash
+launchctl kickstart -k "gui/$UID/io.paperlex.lookup-observer"
+tail -1 "$HOME/Library/Application Support/PaperLex/logs/observer-error.log"
+```
+
+`Accessibility allowed, Input Monitoring allowed` と出れば復旧しています。
+
+クラウド版の URL を変えたいだけなら、インストーラーを使わず `capture.json` と
+`PAPERLEX_LIBRARY_URL` を直接書き換えるほうが安全です（A-5 参照）。
+
+### 単語は保存されたのに、日本語の意味が空になる
+
+Apple 辞書の定義が取得できなかった場合です。保存メッセージに理由が残ります。
+
+```bash
+grep "見つかりませんでした" "$HOME/Library/Application Support/PaperLex/logs/observer.log"
+```
+
+選択に句読点が混ざっていた場合は自動で整形するため、通常は起きません。辞書に見出し語が
+ない語（固有名詞や造語）では起こり得ます。その場合は、単語の詳細画面で自分の意味を追記できます。
+
 ### スマートフォンから接続できない
 
 - LAN モードで再インストールしたことを確認してください。
@@ -232,21 +281,142 @@ JSON のエクスポートは利用できますが、ローカル版には JSON 
 
 サーバーと Observer を停止し、LaunchAgent、Observer、サービス、設定、単語データを `~/Library/Application Support/PaperLex-uninstalled-<日時>` 系のパスへ移動します。データは自動削除されないため、不要であることを確認してから手動で削除できます。
 
-## 任意: プライベートなクラウド版
+## 任意: クラウド版（Mac が停止中でも、外出先から開く）
 
-`hosted/` には、OpenAI Sites と Cloudflare Worker / D1 互換環境向けのプライベート版が含まれています。ブラウザ UI は静的アセットとして配信し、単語と履歴は D1 に保存します。ローカル版を使うだけなら、この設定は不要です。
+`hosted/` には、単語帳を自分専用のサイトとして公開するための一式が入っています。
+ブラウザ UI は静的アセットとして配信し、単語と履歴は Cloudflare D1 に保存します。
+Mac のローカル版だけで足りるなら、この章は不要です。
 
-まずローカルで hosted 版を検証します。
+置き場所は2通りあり、**違いはログイン方法だけ**です。アプリのコードは共通で、
+`PAPERLEX_PASSWORD` を設定したかどうかで認証方式が切り替わります。
+
+| | A. Cloudflare へ直接置く | B. OpenAI Sites |
+| --- | --- | --- |
+| ログイン | PaperLex のパスワードを**初回に1回だけ** | 開くたびに ChatGPT アカウント |
+| 必要なもの | Cloudflare アカウント（無料枠で足ります） | Sites を使える Codex 環境 |
+| 保護される範囲 | `/api/` のデータ | ページ全体 |
+| デプロイ | `./scripts/deploy-cloudflare.sh` | Codex に依頼 |
+
+スマートフォンから毎回ログインしたくない場合は **A** を選んでください。
+セッションは1年有効な HttpOnly cookie に入るため、ホーム画面に追加しておけば
+以降はアイコンを押すだけで開きます。
+
+なお A では、URL を知っている人にログイン欄までは見えます（単語は見えません）。
+ページごと隠したい場合は B を選んでください。
+
+まず、どちらの場合もローカルで検証しておきます。
 
 ```bash
 cd hosted
 npm ci
 npm run db:generate
 npm test
-npm run build
 ```
 
-クラウド版を作る場合は、Sites を利用できる Codex 環境で `hosted/` を作業フォルダーとして開き、次の依頼文をそのまま使用できます。
+---
+
+## A. Cloudflare へ直接置く
+
+### A-1. Cloudflare にログインして D1 を作る
+
+```bash
+cd hosted
+npx wrangler login
+npx wrangler d1 create paperlex
+```
+
+`wrangler login` はブラウザが開き、Cloudflare アカウントの認可を求めます。
+
+### A-2. Secret を3つ登録する
+
+まず値を生成します。表示された文字列は、次のコマンドの入力待ちに貼り付けます。
+
+```bash
+openssl rand -hex 12   # PAPERLEX_PASSWORD
+openssl rand -hex 32   # PAPERLEX_SESSION_SECRET
+openssl rand -hex 24   # PAPERLEX_CAPTURE_TOKEN
+```
+
+```bash
+npx wrangler secret put PAPERLEX_PASSWORD --name paperlex
+npx wrangler secret put PAPERLEX_SESSION_SECRET --name paperlex
+npx wrangler secret put PAPERLEX_CAPTURE_TOKEN --name paperlex
+```
+
+| Secret | 用途 | 控えておく必要 |
+| --- | --- | --- |
+| `PAPERLEX_PASSWORD` | スマートフォンで入力するパスワード | **必要**（パスワードマネージャーへ） |
+| `PAPERLEX_SESSION_SECRET` | ログインセッションの署名鍵 | 不要 |
+| `PAPERLEX_CAPTURE_TOKEN` | Preview からの取り込み認証 | 必要（A-5 で `capture.json` に書きます） |
+
+`PAPERLEX_PASSWORD` が総当たりに対する唯一の防御なので、上のコマンドが生成する長さを保ってください。
+値はファイルにも Git にも保存しないでください。Secret は Cloudflare 側にだけ残ります。
+
+### A-3. テーブルを作ってデプロイする
+
+```bash
+npx wrangler d1 execute paperlex --remote --file drizzle/0000_eminent_banshee.sql
+./scripts/deploy-cloudflare.sh
+```
+
+Worker 名や D1 名を変える場合は、`PAPERLEX_WORKER_NAME` と `PAPERLEX_D1_NAME` を指定します。
+完了すると `https://<Worker名>.<サブドメイン>.workers.dev` が表示されます。
+
+workers.dev のサブドメインを新規に作った直後は、証明書の発行に数分かかります。
+その間は `curl` が `sslv3 alert handshake failure` を返しますが、待てば繋がります。
+
+### A-4. 既存の単語を移す
+
+移行元の画面右上「バックアップ」で JSON を保存してから、一時的な取り込みトークンで送ります。
+
+```bash
+npx wrangler secret put PAPERLEX_IMPORT_TOKEN --name paperlex
+
+PAPERLEX_IMPORT_TOKEN='さきほどの値' ./scripts/import-backup.sh \
+  ~/Downloads/paperlex-2026-01-01.json https://paperlex.example.workers.dev
+
+npx wrangler secret delete PAPERLEX_IMPORT_TOKEN --name paperlex
+```
+
+取り込みが終わったら、最後の行で必ずトークンを削除してください。
+
+### A-5. Preview の保存先を切り替える
+
+`~/Library/Application Support/PaperLex/capture.json` を、新しい URL と A-2 の
+`PAPERLEX_CAPTURE_TOKEN` に書き換えます。Cloudflare 版は Sites のアクセス層を使わないため、
+`sitesBearerToken` があれば削除します。
+
+```json
+{
+  "baseURL": "https://paperlex.example.workers.dev",
+  "token": "A-2 で設定した PAPERLEX_CAPTURE_TOKEN と同じ値"
+}
+```
+
+Mac から `http://127.0.0.1:8787` を開いたときもクラウド版へ転送したい場合は、
+LaunchAgent の `PAPERLEX_LIBRARY_URL` を同じ URL に変更してサービスを入れ直します。
+
+```bash
+plist="$HOME/Library/LaunchAgents/io.paperlex.app.plist"
+/usr/libexec/PlistBuddy -c 'Set :EnvironmentVariables:PAPERLEX_LIBRARY_URL https://paperlex.example.workers.dev' "$plist"
+launchctl bootout "gui/$UID/io.paperlex.app"
+launchctl bootstrap "gui/$UID" "$plist"
+```
+
+`launchctl kickstart` では plist を読み直さないため、`bootout` と `bootstrap` を使います。
+`install-local.sh` を再実行しても同じ結果になりますが、そちらは Observer を置き換えるので
+macOS の権限を再許可する必要が生じます（トラブルシューティング参照）。
+
+### A-6. スマートフォンに登録する
+
+Safari で Worker の URL を開き、A-2 のパスワードを入力します。
+そのあと共有ボタンから「ホーム画面に追加」しておくと、次からはアイコンだけで開きます。
+
+---
+
+## B. OpenAI Sites に置く
+
+Sites を利用できる Codex 環境で `hosted/` を作業フォルダーとして開き、次の依頼文をそのまま使用できます。
 
 ```text
 この hosted フォルダーの PaperLex を、新しい OpenAI Sites プロジェクトとしてセットアップしてください。
@@ -265,97 +435,13 @@ Codex が行う設定内容は次のとおりです。
 4. ランタイムの Secret として、互いに異なる `PAPERLEX_CAPTURE_TOKEN` と `PAPERLEX_IMPORT_TOKEN` を設定します。手動で用意する場合は、それぞれ `openssl rand -hex 32` で生成し、値をファイルや Git に保存しないでください。
 5. ビルドとテストが成功したソースを保存し、所有者限定の private deployment として公開します。
 
-このリポジトリだけでは、Sites アカウントの作成、D1 の準備、アクセス制御、Secret の登録までは自動化されません。一般公開やワンクリック公開を前提とした構成ではありません。
+`PAPERLEX_PASSWORD` を設定しなければ、認証は Sites のプライベート配信に任されます。
+このリポジトリだけでは、Sites アカウントの作成、D1 の準備、アクセス制御、Secret の登録までは自動化されません。
 
-Preview からクラウドへ保存する場合は、Mac 側の `~/Library/Application Support/PaperLex/capture.json` を次の形に変更します。`baseURL` は自分の Sites URL、`token` はクラウド側に登録した `PAPERLEX_CAPTURE_TOKEN` と同じ値にします。
-
-```json
-{
-  "baseURL": "https://your-private-paperlex.example",
-  "token": "your-capture-token"
-}
-```
-
-変更後に `./scripts/install-local.sh` を再実行すると、remote HTTPS の `baseURL` が表示用の `PAPERLEX_LIBRARY_URL` にも安全に引き継がれます。これ以降、`http://127.0.0.1:8787` はクラウド版を開き、Preview の保存先と表示先が分かれません。URL だけを引き継ぎ、`token` や `sitesBearerToken` をブラウザやリダイレクト先へ含めることはありません。
-
-Sites のアクセス層が機械用 Bearer トークンを要求する場合だけ、プラットフォームから発行された値を `sitesBearerToken` として追加できます。ChatGPT のパスワードやセッションクッキーは使用しないでください。
-
-## 任意: Cloudflare へ直接置く（ChatGPT ログインなし）
-
-OpenAI Sites のプライベートサイトは、閲覧のたびに ChatGPT のログインを求めます。
-スマートフォンから開くたびにログインしたくない場合は、同じ `hosted/` を自分の
-Cloudflare アカウントへ直接デプロイし、PaperLex 自身のパスワードで認証できます。
-`PAPERLEX_PASSWORD` を設定したときだけこの方式に切り替わるため、Sites 版の構成は変わりません。
-
-ログインは1回だけで、セッションは1年有効な HttpOnly cookie に保持します。
-ホーム画面に追加すれば、以降はアイコンを押すだけで単語帳が開きます。
-
-Sites 版がページ全体をプラットフォーム側で守るのに対し、Cloudflare 版が守るのは `/api/` の
-データだけです。URL を知っている人には、単語を含まない空の画面とログイン欄までは見えます。
-
-### 1. Cloudflare を準備する
-
-```bash
-cd hosted
-npm ci
-npx wrangler login
-npx wrangler d1 create paperlex
-```
-
-### 2. Secret を設定する
-
-パスワードと署名鍵、取り込み用トークンを生成します。値はファイルや Git に保存しないでください。
-
-```bash
-openssl rand -hex 12   # PAPERLEX_PASSWORD（スマホで入力するもの）
-openssl rand -hex 32   # PAPERLEX_SESSION_SECRET
-openssl rand -hex 24   # PAPERLEX_CAPTURE_TOKEN
-```
-
-```bash
-npx wrangler secret put PAPERLEX_PASSWORD --name paperlex
-npx wrangler secret put PAPERLEX_SESSION_SECRET --name paperlex
-npx wrangler secret put PAPERLEX_CAPTURE_TOKEN --name paperlex
-```
-
-`PAPERLEX_PASSWORD` は総当たりへの唯一の防御なので、上のコマンドが生成する長さを保ってください。
-
-### 3. 単語帳のテーブルを作ってデプロイする
-
-```bash
-npx wrangler d1 execute paperlex --remote --file drizzle/0000_eminent_banshee.sql
-./scripts/deploy-cloudflare.sh
-```
-
-Worker 名や D1 名を変える場合は `PAPERLEX_WORKER_NAME` と `PAPERLEX_D1_NAME` を指定します。
-完了すると `https://paperlex.<サブドメイン>.workers.dev` が表示されます。
-
-### 4. 既存の単語を移す
-
-移行元の画面右上「バックアップ」で JSON を保存し、一時的な取り込みトークンを設定してから送ります。
-
-```bash
-npx wrangler secret put PAPERLEX_IMPORT_TOKEN --name paperlex
-PAPERLEX_IMPORT_TOKEN='さきほどの値' \
-  ./scripts/import-backup.sh ~/Downloads/paperlex-2026-09-04.json https://paperlex.example.workers.dev
-npx wrangler secret delete PAPERLEX_IMPORT_TOKEN --name paperlex
-```
-
-### 5. Preview の保存先を切り替える
-
-`~/Library/Application Support/PaperLex/capture.json` を新しい URL と取り込みトークンに変更します。
-Cloudflare 版は Sites のアクセス層を使わないため、`sitesBearerToken` は削除してください。
-
-```json
-{
-  "baseURL": "https://paperlex.example.workers.dev",
-  "token": "手順2で設定した PAPERLEX_CAPTURE_TOKEN と同じ値"
-}
-```
-
-変更後に `./scripts/install-local.sh` を再実行すると、`http://127.0.0.1:8787` も新しい単語帳へ転送されます。
-
-既存の JSON バックアップを hosted 版へ移す場合は、一時的な `PAPERLEX_IMPORT_TOKEN` を使って `/api/import` へ送信します。移行後は、その Secret を削除またはローテーションしてください。
+Preview からの保存先は A-5 と同じ `capture.json` で指定します。`baseURL` は自分の Sites URL、
+`token` は Sites に登録した `PAPERLEX_CAPTURE_TOKEN` と同じ値にします。
+Sites のアクセス層が機械用 Bearer トークンを要求する場合だけ、プラットフォームから発行された値を
+`sitesBearerToken` として追加できます。ChatGPT のパスワードやセッションクッキーは使用しないでください。
 
 ## Docker でローカルサーバーを動かす
 
@@ -391,6 +477,18 @@ npm run check:mac
 - `npm run check:mac`：Observer の判定、権限連携の契約、plist、署名を検証
 
 `npm run check`、`npm run build:mac`、`npm run check:mac` は macOS と Xcode Command Line Tools が必要です。
+
+クラウド版（`hosted/`）は npm パッケージを使うため、別に用意します。`npm test` はビルドも実行します。
+
+```bash
+cd hosted
+npm ci
+npm test
+npm run dev    # ローカルの Workers ランタイムで動かす
+```
+
+`hosted/scripts/` には、Cloudflare へのデプロイ（`deploy-cloudflare.sh`）と
+バックアップの取り込み（`import-backup.sh`）があります。
 
 ## データとプライバシー
 
